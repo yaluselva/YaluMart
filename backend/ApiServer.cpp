@@ -13,12 +13,13 @@ using namespace std;
 // ===============================
 PGconn* connectDatabase()
 {
-    PGconn* conn = PQconnectdb(
-        "host=localhost "
-        "port=5432 "
-        "dbname=yalu_mart "
-        "user=postgres"
-    );
+PGconn* conn = PQconnectdb(
+    "host=localhost "
+    "port=5432 "
+    "dbname=yalu_mart "
+    "user=postgres "
+    "password=yalu@sm7126"
+);    
 
     if (PQstatus(conn) != CONNECTION_OK)
     {

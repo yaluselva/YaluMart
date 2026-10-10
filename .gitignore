@@ -1,1 +1,4 @@
 backend/ApiServer.exe
+
+build/
+build-api/

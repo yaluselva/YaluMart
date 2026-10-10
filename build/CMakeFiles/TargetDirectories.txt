@@ -1,2 +1,0 @@
-C:/Users/Admin/Documents/yalu_mart/build/CMakeFiles/edit_cache.dir
-C:/Users/Admin/Documents/yalu_mart/build/CMakeFiles/rebuild_cache.dir
