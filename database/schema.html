@@ -1,0 +1,46 @@
+CREATE DATABASE yalu_mart;
+
+-- Users
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL
+);
+
+-- Products
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    price NUMERIC(10,2) NOT NULL,
+    quantity INT NOT NULL,
+    description TEXT,
+    seller_id INT
+);
+
+-- Orders
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id INT,
+    total_amount NUMERIC(10,2) NOT NULL,
+    status VARCHAR(30) DEFAULT 'Pending'
+);
+
+-- Order Items
+CREATE TABLE order_items (
+    id SERIAL PRIMARY KEY,
+    order_id INT,
+    product_id INT,
+    quantity INT NOT NULL,
+    price NUMERIC(10,2) NOT NULL
+);
+
+-- Reviews
+CREATE TABLE reviews (
+    id SERIAL PRIMARY KEY,
+    user_id INT,
+    product_id INT,
+    rating INT,
+    review TEXT
+);

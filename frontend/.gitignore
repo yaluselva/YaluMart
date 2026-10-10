@@ -1,0 +1,14 @@
+# Build files
+*.exe
+*.dll
+*.o
+*.obj
+*.a
+*.lib
+/build/
+/cmake-build-*/
+
+# Private files
+.env
+.env.*
+!.env.example

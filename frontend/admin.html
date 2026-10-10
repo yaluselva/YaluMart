@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>YaluMart - Admin</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        .admin-box {
+            background: white;
+            width: 90%;
+            max-width: 700px;
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px #ccc;
+        }
+
+        .admin-card {
+            background: #f5f5f5;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>Admin Dashboard</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="cart.html">Cart</a>
+    <a href="orders.html">Orders</a>
+    <a href="seller.html">Seller</a>
+    <a href="admin.html">Admin</a>
+</nav>
+
+<main>
+
+    <h2>🛠️ Admin Dashboard</h2>
+
+    <div class="admin-box">
+        <h3>👥 Users</h3>
+        <div id="users"></div>
+    </div>
+
+    <div class="admin-box">
+        <h3>📦 Products</h3>
+        <div id="products"></div>
+    </div>
+
+    <div class="admin-box">
+        <h3>🧾 Orders</h3>
+        <div id="orders"></div>
+    </div>
+
+</main>
+
+<footer>
+    <p>© 2026 YaluMart. All Rights Reserved.</p>
+</footer>
+
+<script>
+
+function showUsers()
+{
+    let box = document.getElementById("users");
+
+    let users =
+        JSON.parse(localStorage.getItem("yaluMartUsers")) || [];
+
+    if (users.length === 0)
+    {
+        box.innerHTML = `
+            <div class="admin-card">
+                <p>Name: Demo User</p>
+                <p>Email: user@yalu.com</p>
+                <p>Role: Buyer</p>
+            </div>
+        `;
+        return;
+    }
+
+    box.innerHTML = "";
+
+    users.forEach(function(user)
+    {
+        box.innerHTML += `
+            <div class="admin-card">
+                <strong>${user.name}</strong>
+                <p>Email: ${user.email}</p>
+                <p>Role: ${user.role || "Buyer"}</p>
+            </div>
+        `;
+    });
+}
+
+
+function showProducts()
+{
+    let box = document.getElementById("products");
+
+    let products =
+        JSON.parse(
+            localStorage.getItem("yaluSellerProducts")
+        ) || [];
+
+    if (products.length === 0)
+    {
+        box.innerHTML = `
+            <div class="admin-card">
+                <h3>🛍️ Smart Watch</h3>
+                <p>Price: ₹500</p>
+                <p>Quantity: 5</p>
+            </div>
+        `;
+        return;
+    }
+
+    box.innerHTML = "";
+
+    products.forEach(function(product)
+    {
+        box.innerHTML += `
+            <div class="admin-card">
+                <h3>🛍️ ${product.name}</h3>
+                <p>Price: ₹${product.price}</p>
+                <p>Quantity: ${product.quantity}</p>
+            </div>
+        `;
+    });
+}
+
+
+function showOrders()
+{
+    let box = document.getElementById("orders");
+
+    let orders =
+        JSON.parse(
+            localStorage.getItem("yaluMartOrders")
+        ) || [];
+
+    if (orders.length === 0)
+    {
+        box.innerHTML = `
+            <div class="admin-card">
+                <p>Order ID: Demo Order</p>
+                <p>Total: ₹500</p>
+                <p>Status: Pending</p>
+            </div>
+        `;
+        return;
+    }
+
+    box.innerHTML = "";
+
+    orders.forEach(function(order)
+    {
+        box.innerHTML += `
+            <div class="admin-card">
+                <h3>🧾 Order ID: ${order.id}</h3>
+                <p>Total: ₹${order.total}</p>
+                <p>Status: ${order.status}</p>
+            </div>
+        `;
+    });
+}
+
+showUsers();
+showProducts();
+showOrders();
+
+</script>
+
+</body>
+</html>

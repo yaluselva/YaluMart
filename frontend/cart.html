@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>YaluMart - Cart</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>Your One Stop Shopping Store</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="cart.html">🛒 Cart</a>
+    <a href="login.html">Login</a>
+    <a href="register.html">Register</a>
+    <a href="seller.html">Seller</a>
+    <a href="admin.html">Admin</a>
+</nav>
+
+<main>
+
+    <h2>🛒 Your Shopping Cart</h2>
+
+    <div id="cartContainer">
+        <p>Loading cart...</p>
+    </div>
+
+    <h2 id="totalAmount">Total: ₹0</h2>
+
+    <button onclick="goToCheckout()">
+        Proceed to Checkout
+    </button>
+
+</main>
+
+<footer>
+    <p>© 2026 YaluMart. All Rights Reserved.</p>
+</footer>
+
+<script>
+
+function loadCart()
+{
+    let cart =
+        JSON.parse(
+            localStorage.getItem("yaluMartCart")
+        ) || [];
+
+    const container =
+        document.getElementById("cartContainer");
+
+    container.innerHTML = "";
+
+    if (cart.length === 0)
+    {
+        container.innerHTML =
+            "<p>Your cart is empty.</p>";
+
+        document.getElementById("totalAmount").innerText =
+            "Total: ₹0";
+
+        return;
+    }
+
+    let total = 0;
+
+    cart.forEach(function(item, index)
+    {
+        total += item.price * item.quantity;
+
+        const div = document.createElement("div");
+
+        div.className = "product";
+
+        div.innerHTML = `
+            <h3>🛍️ ${item.name}</h3>
+
+            <p>Price: ₹${item.price}</p>
+
+            <p>Quantity: ${item.quantity}</p>
+
+            <p>
+                Subtotal: ₹${item.price * item.quantity}
+            </p>
+
+            <button onclick="removeFromCart(${index})">
+                Remove
+            </button>
+        `;
+
+        container.appendChild(div);
+    });
+
+    document.getElementById("totalAmount").innerText =
+        "Total: ₹" + total;
+}
+
+function removeFromCart(index)
+{
+    let cart =
+        JSON.parse(
+            localStorage.getItem("yaluMartCart")
+        ) || [];
+
+    cart.splice(index, 1);
+
+    localStorage.setItem(
+        "yaluMartCart",
+        JSON.stringify(cart)
+    );
+
+    loadCart();
+}
+
+function goToCheckout()
+{
+    let cart =
+        JSON.parse(
+            localStorage.getItem("yaluMartCart")
+        ) || [];
+
+    if (cart.length === 0)
+    {
+        alert("Your cart is empty!");
+        return;
+    }
+
+    window.location.href = "checkout.html";
+}
+
+loadCart();
+
+</script>
+
+</body>
+</html>

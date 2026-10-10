@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YaluMart - My Orders</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>My Orders</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="cart.html">Cart</a>
+    <a href="orders.html">My Orders</a>
+</nav>
+
+<main>
+
+    <h2>My Orders</h2>
+
+    <div id="orders"></div>
+
+</main>
+
+<footer>
+    <p>© 2026 YaluMart. All Rights Reserved.</p>
+</footer>
+
+<script>
+
+let orders = JSON.parse(localStorage.getItem("orders")) || [];
+
+let container = document.getElementById("orders");
+
+if (orders.length === 0) {
+
+    container.innerHTML = `
+        <div class="product">
+            <h3>No Orders Found</h3>
+            <p>You have not placed any orders yet.</p>
+        </div>
+    `;
+
+} else {
+
+    orders.forEach(function(order, index) {
+
+        let itemsHTML = "";
+
+        order.items.forEach(function(item) {
+
+            itemsHTML += `
+                <p>🛍️ ${item.name} - ₹${item.price}</p>
+            `;
+
+        });
+
+        container.innerHTML += `
+            <div class="product">
+
+                <h3>📦 Order ${index + 1}</h3>
+
+                ${itemsHTML}
+
+                <h3>Total: ₹${order.total}</h3>
+
+                <p>Status: ${order.status}</p>
+
+            </div>
+
+            <br>
+        `;
+
+    });
+
+}
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YaluMart - Checkout</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>Your One Stop Shopping Store</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="cart.html">🛒 Cart</a>
+    <a href="orders.html">Orders</a>
+</nav>
+
+<main>
+
+    <h2>🧾 Checkout</h2>
+
+    <div id="checkoutContainer">
+        <p>Loading order details...</p>
+    </div>
+
+    <h2 id="checkoutTotal">Total: ₹0</h2>
+
+    <button onclick="placeOrder()">
+        Place Order
+    </button>
+
+</main>
+
+<footer>
+    <p>© 2026 YaluMart. All Rights Reserved.</p>
+</footer>
+
+<script>
+
+let cart =
+    JSON.parse(
+        localStorage.getItem("yaluMartCart")
+    ) || [];
+
+function loadCheckout()
+{
+    const container =
+        document.getElementById("checkoutContainer");
+
+    container.innerHTML = "";
+
+    if (cart.length === 0)
+    {
+        container.innerHTML =
+            "<p>Your cart is empty.</p>";
+
+        document.getElementById("checkoutTotal").innerText =
+            "Total: ₹0";
+
+        return;
+    }
+
+    let total = 0;
+
+    cart.forEach(function(item)
+    {
+        total += item.price * item.quantity;
+
+        const div = document.createElement("div");
+
+        div.className = "product";
+
+        div.innerHTML = `
+            <h3>🛍️ ${item.name}</h3>
+            <p>Price: ₹${item.price}</p>
+            <p>Quantity: ${item.quantity}</p>
+            <p>Subtotal: ₹${item.price * item.quantity}</p>
+        `;
+
+        container.appendChild(div);
+    });
+
+    document.getElementById("checkoutTotal").innerText =
+        "Total: ₹" + total;
+}
+
+function placeOrder()
+{
+    if (cart.length === 0)
+    {
+        alert("Your cart is empty!");
+        return;
+    }
+
+    const order =
+    {
+        id: Date.now(),
+        items: cart,
+        status: "Pending",
+        total: cart.reduce(
+            function(sum, item)
+            {
+                return sum + item.price * item.quantity;
+            },
+            0
+        )
+    };
+
+    let orders =
+        JSON.parse(
+            localStorage.getItem("yaluMartOrders")
+        ) || [];
+
+    orders.push(order);
+
+    localStorage.setItem(
+        "yaluMartOrders",
+        JSON.stringify(orders)
+    );
+
+    localStorage.removeItem("yaluMartCart");
+
+    alert("Order placed successfully! 🎉");
+
+    window.location.href = "orders.html";
+}
+
+loadCheckout();
+
+</script>
+
+</body>
+</html>

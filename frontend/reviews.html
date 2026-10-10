@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>YaluMart - Reviews</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        .review-box {
+            background: white;
+            max-width: 500px;
+            margin: 20px auto;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px #ccc;
+        }
+
+        .review-box input,
+        .review-box select,
+        .review-box textarea {
+            width: 90%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .review-box button {
+            background: #ff6600;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .review-card {
+            background: white;
+            max-width: 500px;
+            margin: 15px auto;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px #ccc;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>Product Reviews & Ratings</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="cart.html">🛒 Cart</a>
+    <a href="orders.html">Orders</a>
+    <a href="reviews.html">Reviews</a>
+    <a href="seller.html">Seller</a>
+    <a href="admin.html">Admin</a>
+</nav>
+
+<main>
+
+    <h2>⭐ Product Reviews</h2>
+
+    <div class="review-box">
+
+        <h3>✍️ Write a Review</h3>
+
+        <input
+            type="text"
+            id="reviewProduct"
+            placeholder="Product Name"
+        >
+
+        <select id="rating">
+            <option value="">Select Rating</option>
+            <option value="5">⭐⭐⭐⭐⭐ - Excellent</option>
+            <option value="4">⭐⭐⭐⭐ - Very Good</option>
+            <option value="3">⭐⭐⭐ - Good</option>
+            <option value="2">⭐⭐ - Average</option>
+            <option value="1">⭐ - Poor</option>
+        </select>
+
+        <textarea
+            id="reviewText"
+            placeholder="Write your review..."
+            rows="5"
+        ></textarea>
+
+        <br>
+
+        <button type="button" onclick="addReview()">
+            ⭐ Submit Review
+        </button>
+
+    </div>
+
+    <h2>Customer Reviews</h2>
+
+    <div id="reviewContainer">
+        <p>No reviews yet.</p>
+    </div>
+
+</main>
+
+<footer>
+    <p>© 2026 YaluMart. All Rights Reserved.</p>
+</footer>
+
+<script>
+
+function addReview()
+{
+    let product =
+        document.getElementById("reviewProduct").value.trim();
+
+    let rating =
+        document.getElementById("rating").value;
+
+    let review =
+        document.getElementById("reviewText").value.trim();
+
+    if (product === "" || rating === "" || review === "")
+    {
+        alert("Please fill all review details!");
+        return;
+    }
+
+    let reviews =
+        JSON.parse(
+            localStorage.getItem("yaluMartReviews")
+        ) || [];
+
+    let newReview =
+    {
+        product: product,
+        rating: Number(rating),
+        review: review
+    };
+
+    reviews.push(newReview);
+
+    localStorage.setItem(
+        "yaluMartReviews",
+        JSON.stringify(reviews)
+    );
+
+    document.getElementById("reviewProduct").value = "";
+    document.getElementById("rating").value = "";
+    document.getElementById("reviewText").value = "";
+
+    showReviews();
+
+    alert("Review added successfully! ⭐");
+}
+
+function showReviews()
+{
+    let reviews =
+        JSON.parse(
+            localStorage.getItem("yaluMartReviews")
+        ) || [];
+
+    let container =
+        document.getElementById("reviewContainer");
+
+    container.innerHTML = "";
+
+    if (reviews.length === 0)
+    {
+        container.innerHTML =
+            "<p>No reviews yet.</p>";
+
+        return;
+    }
+
+    reviews.forEach(function(item)
+    {
+        let card =
+            document.createElement("div");
+
+        card.className = "review-card";
+
+        card.innerHTML =
+            "<h3>🛍️ " + item.product + "</h3>" +
+            "<p>Rating: " +
+            "⭐".repeat(item.rating) +
+            "</p>" +
+            "<p>Review: " +
+            item.review +
+            "</p>";
+
+        container.appendChild(card);
+    });
+}
+
+showReviews();
+
+</script>
+
+</body>
+
+</html>

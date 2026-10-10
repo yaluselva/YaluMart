@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>YaluMart - Products</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>Your One Stop Shopping Store</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="cart.html">🛒 Cart</a>
+    <a href="login.html">Login</a>
+    <a href="register.html">Register</a>
+    <a href="seller.html">Seller</a>
+    <a href="admin.html">Admin</a>
+</nav>
+
+<main>
+
+    <h2>Our Products</h2>
+
+    <input
+        type="text"
+        id="searchBox"
+        placeholder="Search products..."
+        style="padding:10px; width:250px; margin:20px;"
+    >
+
+    <div class="products" id="productsContainer">
+        <p>Loading products...</p>
+    </div>
+
+</main>
+
+<footer>
+    <p>© 2026 YaluMart. All Rights Reserved.</p>
+</footer>
+
+<script>
+
+const API_URL = "http://localhost:8080/api/products";
+
+let allProducts = [];
+
+async function loadProducts()
+{
+    try
+    {
+        const response = await fetch(API_URL);
+
+        if (!response.ok)
+        {
+            throw new Error("API connection failed");
+        }
+
+        const products = await response.json();
+
+        allProducts = products;
+
+        displayProducts(products);
+    }
+    catch (error)
+    {
+        console.error(error);
+
+        document.getElementById("productsContainer").innerHTML =
+            "<p style='color:red;'>Unable to connect to YaluMart API.</p>";
+    }
+}
+
+function displayProducts(products)
+{
+    const container =
+        document.getElementById("productsContainer");
+
+    container.innerHTML = "";
+
+    products.forEach(function(product)
+    {
+        const div = document.createElement("div");
+
+        div.className = "product";
+
+        div.innerHTML = `
+            <h3>🛍️ ${product.name}</h3>
+
+            <p>Price: ₹${product.price}</p>
+
+            <p>Product ID: ${product.id}</p>
+
+            <button onclick="addToCart('${product.name}', ${product.price})">
+                Add to Cart
+            </button>
+        `;
+
+        container.appendChild(div);
+    });
+}
+
+document
+    .getElementById("searchBox")
+    .addEventListener("input", function()
+    {
+        const searchText =
+            this.value.toLowerCase();
+
+        const filtered =
+            allProducts.filter(function(product)
+            {
+                return product.name
+                    .toLowerCase()
+                    .includes(searchText);
+            });
+
+        displayProducts(filtered);
+    });
+
+function addToCart(name, price)
+{
+    let cart =
+        JSON.parse(
+            localStorage.getItem("yaluMartCart")
+        ) || [];
+
+    cart.push({
+        name: name,
+        price: Number(price),
+        quantity: 1
+    });
+
+    localStorage.setItem(
+        "yaluMartCart",
+        JSON.stringify(cart)
+    );
+
+    alert(name + " added to cart!");
+}
+
+loadProducts();
+
+</script>
+
+</body>
+</html>

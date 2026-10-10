@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YaluMart - Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <h1>🛒 YaluMart</h1>
+    <p>Login to your account</p>
+</header>
+
+<main>
+
+    <div class="product">
+
+        <h2>Login</h2>
+
+        <input type="email" id="loginEmail" placeholder="Email">
+        <br><br>
+
+        <input type="password" id="loginPassword" placeholder="Password">
+        <br><br>
+
+        <button type="button" onclick="loginUser()">Login</button>
+
+        <p>Don't have an account?</p>
+
+        <a href="register.html">
+            <button type="button">Register</button>
+        </a>
+
+    </div>
+
+</main>
+
+<script>
+
+function loginUser() {
+
+    let email = document.getElementById("loginEmail").value.trim();
+    let password = document.getElementById("loginPassword").value;
+
+    if (email === "" || password === "") {
+        alert("Please enter email and password.");
+        return;
+    }
+
+    let user = JSON.parse(localStorage.getItem("yaluMartUser"));
+
+    if (user === null) {
+        alert("Please register first.");
+        return;
+    }
+
+    if (email === user.email && password === user.password) {
+
+        alert("Login successful!");
+
+        localStorage.setItem(
+            "loggedInUser",
+            JSON.stringify(user)
+        );
+
+        window.location.href = "index.html";
+
+    } else {
+
+        alert("Invalid email or password.");
+
+    }
+}
+
+</script>
+
+</body>
+</html>
