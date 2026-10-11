@@ -1,36 +1,39 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>YaluMart - Admin</title>
-
     <link rel="stylesheet" href="style.css">
-
     <style>
         .admin-box {
             background: white;
             width: 90%;
-            max-width: 700px;
+            max-width: 850px;
             margin: 20px auto;
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 3px 10px #ccc;
         }
-
         .admin-card {
             background: #f5f5f5;
             margin: 10px 0;
             padding: 15px;
             border-radius: 8px;
+            overflow-wrap: anywhere;
+        }
+        .admin-card button, .admin-card select {
+            margin: 5px;
+            padding: 8px;
+        }
+        .message {
+            text-align: center;
+            margin: 15px;
         }
     </style>
 </head>
-
 <body>
-
 <header>
     <h1>🛒 YaluMart</h1>
     <p>Admin Dashboard</p>
@@ -46,8 +49,8 @@
 </nav>
 
 <main>
-
     <h2>🛠️ Admin Dashboard</h2>
+    <p id="message" class="message">Loading dashboard...</p>
 
     <div class="admin-box">
         <h3>👥 Users</h3>
@@ -64,6 +67,9 @@
         <div id="orders"></div>
     </div>
 
+    <div style="text-align:center; margin:20px">
+        <button onclick="loadDashboard()">🔄 Refresh Dashboard</button>
+    </div>
 </main>
 
 <footer>
@@ -71,117 +77,206 @@
 </footer>
 
 <script>
+const API = "https://yalumart-f1hi.onrender.com";
 
-function showUsers()
-{
-    let box = document.getElementById("users");
-
-    let users =
-        JSON.parse(localStorage.getItem("yaluMartUsers")) || [];
-
-    if (users.length === 0)
-    {
-        box.innerHTML = `
-            <div class="admin-card">
-                <p>Name: Demo User</p>
-                <p>Email: user@yalu.com</p>
-                <p>Role: Buyer</p>
-            </div>
-        `;
-        return;
-    }
-
-    box.innerHTML = "";
-
-    users.forEach(function(user)
-    {
-        box.innerHTML += `
-            <div class="admin-card">
-                <strong>${user.name}</strong>
-                <p>Email: ${user.email}</p>
-                <p>Role: ${user.role || "Buyer"}</p>
-            </div>
-        `;
-    });
+function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;",
+        '"': "&quot;", "'": "&#39;"
+    })[ch]);
 }
 
+async function requestJSON(path, options = {}) {
+    const response = await fetch(API + path, options);
+    const text = await response.text();
+    let data;
 
-function showProducts()
-{
-    let box = document.getElementById("products");
-
-    let products =
-        JSON.parse(
-            localStorage.getItem("yaluSellerProducts")
-        ) || [];
-
-    if (products.length === 0)
-    {
-        box.innerHTML = `
-            <div class="admin-card">
-                <h3>🛍️ Smart Watch</h3>
-                <p>Price: ₹500</p>
-                <p>Quantity: 5</p>
-            </div>
-        `;
-        return;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        throw new Error("Invalid server response");
     }
 
-    box.innerHTML = "";
-
-    products.forEach(function(product)
-    {
-        box.innerHTML += `
-            <div class="admin-card">
-                <h3>🛍️ ${product.name}</h3>
-                <p>Price: ₹${product.price}</p>
-                <p>Quantity: ${product.quantity}</p>
-            </div>
-        `;
-    });
-}
-
-
-function showOrders()
-{
-    let box = document.getElementById("orders");
-
-    let orders =
-        JSON.parse(
-            localStorage.getItem("yaluMartOrders")
-        ) || [];
-
-    if (orders.length === 0)
-    {
-        box.innerHTML = `
-            <div class="admin-card">
-                <p>Order ID: Demo Order</p>
-                <p>Total: ₹500</p>
-                <p>Status: Pending</p>
-            </div>
-        `;
-        return;
+    if (!response.ok) {
+        throw new Error(data.message || `HTTP ${response.status}`);
     }
-
-    box.innerHTML = "";
-
-    orders.forEach(function(order)
-    {
-        box.innerHTML += `
-            <div class="admin-card">
-                <h3>🧾 Order ID: ${order.id}</h3>
-                <p>Total: ₹${order.total}</p>
-                <p>Status: ${order.status}</p>
-            </div>
-        `;
-    });
+    return data;
 }
 
-showUsers();
-showProducts();
-showOrders();
+async function showUsers() {
+    const box = document.getElementById("users");
 
+    try {
+        const data = await requestJSON("/api/users");
+        const users = Array.isArray(data) ? data : data.users;
+
+        if (!Array.isArray(users)) throw new Error("Unexpected users response");
+        if (!users.length) {
+            box.innerHTML = "<p>No users found.</p>";
+            return;
+        }
+
+        box.innerHTML = users.map(user => `
+            <div class="admin-card">
+                <strong>${escapeHTML(user.name)}</strong>
+                <p>ID: ${escapeHTML(user.id)}</p>
+                <p>Email: ${escapeHTML(user.email)}</p>
+                <p>Role: ${escapeHTML(user.role || "Buyer")}</p>
+                <button onclick="deleteUser('${escapeHTML(user.id)}')">
+                    Delete User
+                </button>
+            </div>
+        `).join("");
+    } catch (error) {
+        box.innerHTML = `<p>${escapeHTML(error.message)}</p>`;
+    }
+}
+
+async function showProducts() {
+    const box = document.getElementById("products");
+
+    try {
+        const data = await requestJSON("/api/products");
+        const products = Array.isArray(data) ? data : data.products;
+
+        if (!Array.isArray(products)) throw new Error("Unexpected products response");
+        if (!products.length) {
+            box.innerHTML = "<p>No products found.</p>";
+            return;
+        }
+
+        box.innerHTML = products.map(product => `
+            <div class="admin-card">
+                <h3>🛍️ ${escapeHTML(product.name)}</h3>
+                <p>ID: ${escapeHTML(product.id)}</p>
+                <p>Price: ₹${escapeHTML(product.price)}</p>
+                <p>Quantity: ${escapeHTML(product.quantity)}</p>
+                <button onclick="deleteProduct('${escapeHTML(product.id)}')">
+                    Delete Product
+                </button>
+            </div>
+        `).join("");
+    } catch (error) {
+        box.innerHTML = `<p>${escapeHTML(error.message)}</p>`;
+    }
+}
+
+async function showOrders() {
+    const box = document.getElementById("orders");
+
+    try {
+        const data = await requestJSON("/api/orders");
+        const orders = Array.isArray(data) ? data : data.orders;
+
+        if (!Array.isArray(orders)) throw new Error("Unexpected orders response");
+        if (!orders.length) {
+            box.innerHTML = "<p>No orders found.</p>";
+            return;
+        }
+
+        box.innerHTML = orders.map(order => `
+            <div class="admin-card">
+                <h3>🧾 Order ID: ${escapeHTML(order.id)}</h3>
+                <p>Total: ₹${escapeHTML(order.total)}</p>
+                <p>Status: ${escapeHTML(order.status || "Pending")}</p>
+                <label>
+                    Status:
+                    <select id="status-${escapeHTML(order.id)}">
+                        <option value="Pending">Pending</option>
+                        <option value="Processing">Processing</option>
+                        <option value="Shipped">Shipped</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </label>
+                <button onclick="updateOrder('${escapeHTML(order.id)}')">
+                    Update Status
+                </button>
+                <button onclick="deleteOrder('${escapeHTML(order.id)}')">
+                    Delete Order
+                </button>
+            </div>
+        `).join("");
+
+        orders.forEach(order => {
+            const select = document.getElementById(`status-${order.id}`);
+            if (select) select.value = order.status || "Pending";
+        });
+    } catch (error) {
+        box.innerHTML = `<p>${escapeHTML(error.message)}</p>`;
+    }
+}
+
+async function deleteProduct(id) {
+    if (!confirm("Delete this product?")) return;
+    try {
+        await requestJSON("/api/products/" + encodeURIComponent(id), {
+            method: "DELETE"
+        });
+        alert("Product deleted");
+        await showProducts();
+    } catch (error) {
+        alert("Delete failed: " + error.message);
+    }
+}
+
+async function deleteUser(id) {
+    if (!confirm("Delete this user?")) return;
+    try {
+        await requestJSON("/api/users/" + encodeURIComponent(id), {
+            method: "DELETE"
+        });
+        alert("User deleted");
+        await showUsers();
+    } catch (error) {
+        alert("Delete failed: " + error.message);
+    }
+}
+
+async function deleteOrder(id) {
+    if (!confirm("Delete this order?")) return;
+    try {
+        await requestJSON("/api/orders/" + encodeURIComponent(id), {
+            method: "DELETE"
+        });
+        alert("Order deleted");
+        await showOrders();
+    } catch (error) {
+        alert("Delete failed: " + error.message);
+    }
+}
+
+async function updateOrder(id) {
+    const select = document.getElementById(`status-${id}`);
+    if (!select) return;
+
+    try {
+        await requestJSON("/api/orders/status", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                id: Number(id),
+                status: select.value
+            })
+        });
+        alert("Order status updated");
+        await showOrders();
+    } catch (error) {
+        alert("Update failed: " + error.message);
+    }
+}
+
+async function loadDashboard() {
+    document.getElementById("message").textContent =
+        "Loading data from backend...";
+
+    await Promise.all([showUsers(), showProducts(), showOrders()]);
+
+    document.getElementById("message").textContent =
+        "Dashboard loading finished.";
+}
+
+loadDashboard();
 </script>
-
 </body>
 </html>
