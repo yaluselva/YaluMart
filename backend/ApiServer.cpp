@@ -11,6 +11,7 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 
 using namespace std;
@@ -263,10 +264,14 @@ string getProducts(PGconn* db) {
     );
 
     if (PQresultStatus(r) != PGRES_TUPLES_OK) {
-        cerr << PQresultErrorMessage(r) << '\n';
-        PQclear(r);
-        return "{\"success\":false,\"message\":\"Failed to fetch products\"}";
-    }
+    PQclear(r);
+    return "{\"success\":false,\"message\":\"Login failed\"}";
+}
+
+if (PQntuples(r) == 0) {
+    PQclear(r);
+    return "{\"success\":false,\"message\":\"Invalid email or password\"}";
+}
 
     string json = "[";
 
