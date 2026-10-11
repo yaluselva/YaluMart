@@ -265,13 +265,10 @@ string getProducts(PGconn* db) {
 
     if (PQresultStatus(r) != PGRES_TUPLES_OK) {
     PQclear(r);
-    return "{\"success\":false,\"message\":\"Login failed\"}";
+return "{\"success\":false,\"message\":\"Failed to fetch products\"}";
 }
 
-if (PQntuples(r) == 0) {
-    PQclear(r);
-    return "{\"success\":false,\"message\":\"Invalid email or password\"}";
-}
+
 
     string json = "[";
 
@@ -430,15 +427,15 @@ string loginUser(PGconn* db, const string& body) {
         "WHERE email=$1 AND password_hash=crypt($2,password_hash)",
         2, nullptr, values, nullptr, nullptr, 0
     );
+        if (PQresultStatus(r) != PGRES_TUPLES_OK) {
+    PQclear(r);
+    return "{\"success\":false,\"message\":\"Login failed\"}";
+}
 
-    if (PQresultStatus(r) != PGRES_TUPLES_OK) {
-        PQcl
-        f (PQntuples(r) == 0) {
-        PQclear(r);
-        return "{\"success\":false,\"message\":\"Invalid email or password\"}";
-    }
-
-    string id = PQgetvalue(r, 0, 0);
+if (PQntuples(r) == 0) {
+    PQclear(r);
+    return "{\"success\":false,\"message\":\"Invalid email or password\"}";
+}
     string n = jsonEscape(PQgetvalue(r, 0, 1));
     string e = jsonEscape(PQgetvalue(r, 0, 2));
     PQclear(r);
