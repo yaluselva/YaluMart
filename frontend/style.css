@@ -1,90 +1,168 @@
+* {
+    box-sizing: border-box;
+}
+
 body {
     font-family: Arial, sans-serif;
     margin: 0;
-    background: #f4f4f4;
-    color: #333;
+    background: #f4f8ff;
+    color: #24324a;
 }
 
 header {
-    background: #ff6600;
+    background: linear-gradient(135deg, #0d47a1, #1976d2);
     color: white;
     text-align: center;
-    padding: 25px;
+    padding: 28px 15px;
 }
 
 header h1 {
     margin: 0;
-    font-size: 40px;
+    font-size: 36px;
 }
 
 header p {
-    margin: 8px;
-    font-size: 18px;
+    margin: 10px 0 0;
+    font-size: 17px;
 }
 
 nav {
-    background: #222;
-    text-align: center;
-    padding: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    background: white;
+    padding: 16px 10px;
+    box-shadow: 0 2px 8px #dce6f5;
 }
 
 nav a {
-    color: white;
+    color: #174ea6;
     text-decoration: none;
-    margin: 0 15px;
-    font-size: 16px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: bold;
 }
 
 nav a:hover {
-    color: #ff6600;
+    background: #e8f1ff;
+    color: #0d47a1;
 }
 
 main {
     text-align: center;
-    padding: 40px 20px;
+    padding: 35px 18px;
+    min-height: 300px;
 }
 
 main h2 {
-    font-size: 30px;
+    font-size: 28px;
+    color: #174ea6;
+}
+
+.form-box {
+    background: white;
+    width: 100%;
+    max-width: 420px;
+    margin: 25px auto;
+    padding: 28px;
+    border-radius: 16px;
+    box-shadow: 0 5px 20px #dce6f5;
+}
+
+input,
+select,
+textarea {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    margin: 14px 0;
+    border: 1px solid #ccd9ed;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid #90baff;
+    border-color: #1976d2;
+}
+
+button {
+    background: #1565c0;
+    color: white;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0d47a1;
 }
 
 .products {
     display: flex;
     justify-content: center;
-    gap: 25px;
+    gap: 22px;
     flex-wrap: wrap;
-    margin-top: 30px;
+    margin-top: 28px;
 }
 
 .product {
     background: white;
-    width: 220px;
-    padding: 25px;
-    border-radius: 10px;
-    box-shadow: 0 3px 10px #ccc;
+    width: 230px;
+    max-width: 100%;
+    padding: 24px;
+    border-radius: 14px;
+    box-shadow: 0 4px 15px #dce6f5;
 }
 
 .product h3 {
-    font-size: 22px;
+    color: #174ea6;
+    font-size: 21px;
 }
 
 .product button {
-    background: #ff6600;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.product button:hover {
-    background: #e65c00;
+    margin-top: 10px;
 }
 
 footer {
-    background: #222;
+    background: #12315c;
     color: white;
     text-align: center;
-    padding: 15px;
-    margin-top: 40px;
+    padding: 18px;
+    margin-top: 35px;
+}
+
+a {
+    color: #1565c0;
+}
+
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 30px;
+    }
+
+    nav {
+        gap: 5px;
+    }
+
+    nav a {
+        margin: 0;
+        padding: 10px;
+        font-size: 14px;
+    }
+
+    main {
+        padding: 25px 12px;
+    }
+
+    .form-box {
+        padding: 20px;
+    }
 }
