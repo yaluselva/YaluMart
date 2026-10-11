@@ -13,7 +13,6 @@
 #include <algorithm>
 
 using namespace std;
-
 PGconn* connectDatabase() {
     const char* url = getenv("DATABASE_URL");
 
@@ -29,6 +28,24 @@ PGconn* connectDatabase() {
         PQfinish(db);
         return nullptr;
     }
+    PGresult* table = PQexec(db,
+    "CREATE TABLE IF NOT EXISTS products ("
+    "id SERIAL PRIMARY KEY,"
+    "name TEXT NOT NULL,"
+    "price NUMERIC(10,2) NOT NULL DEFAULT 0,"
+    "quantity INTEGER NOT NULL DEFAULT 0"
+    ")"
+);
+
+if (PQresultStatus(table) != PGRES_COMMAND_OK) {
+    cerr << "Products table error: "
+         << PQerrorMessage(db) << '\n';
+    PQclear(table);
+    PQfinish(db);
+    return nullptr;
+}
+
+PQclear(table);
 
     cout << "PostgreSQL connected\n";
     return db;
