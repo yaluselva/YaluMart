@@ -13,9 +13,7 @@
 </header>
 
 <main>
-
     <div class="product">
-
         <h2>Login</h2>
 
         <input type="email" id="loginEmail" placeholder="Email">
@@ -32,47 +30,55 @@
             <button type="button">Register</button>
         </a>
 
+        <p id="loginMessage"></p>
     </div>
-
 </main>
 
 <script>
+async function loginUser() {
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const message = document.getElementById("loginMessage");
 
-function loginUser() {
-
-    let email = document.getElementById("loginEmail").value.trim();
-    let password = document.getElementById("loginPassword").value;
-
-    if (email === "" || password === "") {
-        alert("Please enter email and password.");
+    if (!email || !password) {
+        message.textContent = "Please enter email and password.";
         return;
     }
 
-    let user = JSON.parse(localStorage.getItem("yaluMartUser"));
+    message.textContent = "Checking login...";
 
-    if (user === null) {
-        alert("Please register first.");
-        return;
-    }
-
-    if (email === user.email && password === user.password) {
-
-        alert("Login successful!");
-
-        localStorage.setItem(
-            "loggedInUser",
-            JSON.stringify(user)
+    try {
+        const response = await fetch(
+            "https://yalumart-f1hi.onrender.com/api/login",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ email, password })
+            }
         );
 
-        window.location.href = "index.html";
+        const result = await response.json();
 
-    } else {
+        if (response.ok && result.success) {
+            const user = result.user || { email: email };
 
-        alert("Invalid email or password.");
+            // Store only the returned user details, never the password.
+            localStorage.setItem("loggedInUser", JSON.stringify(user));
 
+            message.textContent = "Login successful!";
+            window.location.href = "index.html";
+        } else {
+            message.textContent =
+                result.message || "Invalid email or password.";
+        }
+
+    } catch (error) {
+        message.textContent =
+            "Unable to connect to YaluMart API. Please try again.";
     }
 }
-
 </script>
 
 </body>
