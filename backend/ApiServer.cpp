@@ -241,14 +241,13 @@ void sendResponse(int client, const string& body,
         "HTTP/1.1 " + status + "\r\n"
         "Content-Type: application/json; charset=utf-8\r\n"
         "Access-Control-Allow-Origin: *\r\n"
-        "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n"
-        "Access-Control-Allow-Headers: Content-Type\r\n"
+        "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n"
+              "Access-Control-Allow-Headers: Content-Type\r\n"
         "Connection: close\r\n"
         "Content-Length: " + to_string(body.size()) +
         "\r\n\r\n" + body;
 
     size_t sent = 0;
-
     while (sent < response.size()) {
         ssize_t n = send(client, response.data() + sent,
                          response.size() - sent, 0);
@@ -381,6 +380,7 @@ string registerUser(PGconn* db, const string& body) {
         name.c_str(), email.c_str(), password.c_str()
     };
 
+
     PGresult* r = PQexecParams(
         db,
         "INSERT INTO users(name,email,password_hash) "
@@ -410,7 +410,6 @@ string registerUser(PGconn* db, const string& body) {
            "\"user\":{\"id\":" + id + ",\"name\":\"" + n +
            "\",\"email\":\"" + e + "\"}}";
 }
-
 string loginUser(PGconn* db, const string& body) {
     string email = jsonString(body, "email");
     string password = jsonString(body, "password");
@@ -427,15 +426,18 @@ string loginUser(PGconn* db, const string& body) {
         "WHERE email=$1 AND password_hash=crypt($2,password_hash)",
         2, nullptr, values, nullptr, nullptr, 0
     );
-        if (PQresultStatus(r) != PGRES_TUPLES_OK) {
-    PQclear(r);
-    return "{\"success\":false,\"message\":\"Login failed\"}";
-}
 
-if (PQntuples(r) == 0) {
-    PQclear(r);
-    return "{\"success\":false,\"message\":\"Invalid email or password\"}";
-}
+    if (PQresultStatus(r) != PGRES_TUPLES_OK) {
+        PQclear(r);
+        return "{\"success\":false,\"message\":\"Login failed\"}";
+    }
+
+    if (PQntuples(r) == 0) {
+        PQclear(r);
+        return "{\"success\":false,\"message\":\"Invalid email or password\"}";
+    }
+
+    string id = PQgetvalue(r, 0, 0);
     string n = jsonEscape(PQgetvalue(r, 0, 1));
     string e = jsonEscape(PQgetvalue(r, 0, 2));
     PQclear(r);
@@ -444,6 +446,7 @@ if (PQntuples(r) == 0) {
            "\"user\":{\"id\":" + id + ",\"name\":\"" + n +
            "\",\"email\":\"" + e + "\"}}";
 }
+
 
 // Create an order in PostgreSQL.
 string createOrder(PGconn* db, const string& body) {
