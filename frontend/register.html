@@ -65,39 +65,27 @@
     <p>© 2026 YaluMart. All Rights Reserved.</p>
 </footer>
 
+
 <script>
+async function registerUser() {
+    const name = document.getElementById("name").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
 
-async function registerUser()
-{
-    const name =
-        document.getElementById("name").value.trim();
-
-    const email =
-        document.getElementById("email").value.trim();
-
-    const password =
-        document.getElementById("password").value.trim();
-
-    if (name === "" || email === "" || password === "")
-    {
+    if (!name || !email || !password) {
         alert("Please fill all fields!");
         return;
     }
 
-    try
-    {
+    try {
         const response = await fetch(
-            "http://localhost:8080/api/register",
+            "https://yalumart-f1hi.onrender.com/api/register",
             {
                 method: "POST",
-
-                headers:
-                {
+                headers: {
                     "Content-Type": "application/json"
                 },
-
-                body: JSON.stringify(
-                {
+                body: JSON.stringify({
                     name: name,
                     email: email,
                     password: password
@@ -107,23 +95,21 @@ async function registerUser()
 
         const result = await response.json();
 
-        alert(result.message);
+        if (!response.ok) {
+            alert(result.message || "Registration failed!");
+            return;
+        }
 
-        if (result.success)
-        {
+        alert(result.message || "Registration successful!");
+
+        if (result.success) {
             window.location.href = "login.html";
         }
-    }
-    catch (error)
-    {
-        console.log(error);
-
-        alert(
-            "Unable to connect to YaluMart API!"
-        );
+    } catch (error) {
+        console.error("Register error:", error);
+        alert("Unable to connect to YaluMart API!");
     }
 }
-
 </script>
 
 </body>

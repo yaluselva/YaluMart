@@ -2,7 +2,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
 #include <libpq-fe.h>
 
 #include <cstdlib>
@@ -11,8 +10,10 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <cctype>
 
 using namespace std;
+
 PGconn* connectDatabase() {
     const char* url = getenv("DATABASE_URL");
 
@@ -24,28 +25,41 @@ PGconn* connectDatabase() {
     PGconn* db = PQconnectdb(url);
 
     if (PQstatus(db) != CONNECTION_OK) {
-        cerr << PQerrorMessage(db) << '\n';
+        cerr << "Database connection failed\n";
         PQfinish(db);
         return nullptr;
     }
-    PGresult* table = PQexec(db,
-    "CREATE TABLE IF NOT EXISTS products ("
-    "id SERIAL PRIMARY KEY,"
-    "name TEXT NOT NULL,"
-    "price NUMERIC(10,2) NOT NULL DEFAULT 0,"
-    "quantity INTEGER NOT NULL DEFAULT 0"
-    ")"
-);
 
-if (PQresultStatus(table) != PGRES_COMMAND_OK) {
-    cerr << "Products table error: "
-         << PQerrorMessage(db) << '\n';
-    PQclear(table);
-    PQfinish(db);
-    return nullptr;
-}
+    const char* statements[] = {
+        "CREATE EXTENSION IF NOT EXISTS pgcrypto",
 
-PQclear(table);
+        "CREATE TABLE IF NOT EXISTS products ("
+        "id SERIAL PRIMARY KEY,"
+        "name TEXT NOT NULL,"
+        "price NUMERIC(10,2) NOT NULL DEFAULT 0,"
+        "quantity INTEGER NOT NULL DEFAULT 0)",
+
+        "CREATE TABLE IF NOT EXISTS users ("
+        "id SERIAL PRIMARY KEY,"
+        "name TEXT NOT NULL,"
+        "email TEXT NOT NULL UNIQUE,"
+        "password_hash TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    };
+
+    for (const char* sql : statements) {
+        PGresult* r = PQexec(db, sql);
+
+        if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+            cerr << "Database initialization failed: "
+                 << PQresultErrorMessage(r) << '\n';
+            PQclear(r);
+            PQfinish(db);
+            return nullptr;
+        }
+
+        PQclear(r);
+    }
 
     cout << "PostgreSQL connected\n";
     return db;
@@ -53,16 +67,109 @@ PQclear(table);
 
 string jsonEscape(const string& s) {
     string out;
-    for (char c : s) {
-        if (c == '"' || c == '\\') out += '\\';
-        if (c == '\n') { out += "\\n"; continue; }
-        if (c == '\r') continue;
-        out += c;
+
+    for (unsigned char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:
+                if (c < 0x20) {
+                    const char* hex = "0123456789abcdef";
+                    out += "\\u00";
+                    out += hex[(c >> 4) & 0x0f];
+                    out += hex[c & 0x0f];
+                } else {
+                    out += static_cast<char>(c);
+                }
+        }
     }
+
     return out;
 }
 
-void sendResponse(int client, const string& body,
+string jsonString(const string& body, const string& key) {
+    string pattern = "\"" + key + "\"";
+    size_t p = body.find(pattern);
+
+    if (p == string::npos) return "";
+
+    p = body.find(':', p + pattern.size());
+    if (p == string::npos) return "";
+
+    ++p;
+
+    while (p < body.size() &&
+           isspace(static_cast<unsigned char>(body[p]))) {
+        ++p;
+    }
+
+    if (p >= body.size() || body[p] != '"') return "";
+
+    ++p;
+    string value;
+    bool escaped = false;
+
+    for (; p < body.size(); ++p) {
+        char c = body[p];
+
+        if (escaped) {
+            switch (c) {
+                case 'n': value += '\n'; break;
+                case 'r': value += '\r'; break;
+                case 't': value += '\t'; break;
+                case '"': value += '"'; break;
+                case '\\': value += '\\'; break;
+                default: value += c; break;
+            }
+
+            escaped = false;
+        } else if (c == '\\') {
+            escaped = true;
+        } else if (c == '"') {
+            return value;
+        } else {
+            value += c;
+        }
+    }
+
+    return "";
+}
+
+string jsonNumber(const string& body, const string& key) {
+    string pattern = "\"" + key + "\"";
+    size_t p = body.find(pattern);
+
+    if (p == string::npos) return "";
+
+    p = body.find(':', p + pattern.size());
+    if (p == string::npos) return "";
+
+    ++p;
+
+    while (p < body.size() &&
+           isspace(static_cast<unsigned char>(body[p]))) {
+        ++p;
+    }
+
+    size_t end = body.find_first_of(",}", p);
+
+    if (end == string::npos) return "";
+
+    string value = body.substr(p, end - p);
+
+    while (!value.empty() &&
+           isspace(static_cast<unsigned char>(value.back()))) {
+        value.pop_back();
+    }
+
+    return value;
+}
+
+void sendResponse(int client,
+                  const string& body,
                   const string& status = "200 OK") {
     string response =
         "HTTP/1.1 " + status + "\r\n"
@@ -71,20 +178,30 @@ void sendResponse(int client, const string& body,
         "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n"
         "Access-Control-Allow-Headers: Content-Type\r\n"
         "Connection: close\r\n"
-        "Content-Length: " + to_string(body.size()) + "\r\n\r\n" + body;
+        "Content-Length: " + to_string(body.size()) +
+        "\r\n\r\n" + body;
 
     size_t sent = 0;
+
     while (sent < response.size()) {
-        ssize_t n = send(client, response.data() + sent,
-                         response.size() - sent, 0);
+        ssize_t n = send(
+            client,
+            response.data() + sent,
+            response.size() - sent,
+            0
+        );
+
         if (n <= 0) break;
+
         sent += static_cast<size_t>(n);
     }
 }
 
 string getProducts(PGconn* db) {
     PGresult* r = PQexec(
-        db, "SELECT id, name, price, quantity FROM products ORDER BY id"
+        db,
+        "SELECT id, name, price, quantity "
+        "FROM products ORDER BY id"
     );
 
     if (PQresultStatus(r) != PGRES_TUPLES_OK) {
@@ -93,104 +210,262 @@ string getProducts(PGconn* db) {
     }
 
     string json = "[";
+
     for (int i = 0; i < PQntuples(r); ++i) {
         if (i) json += ",";
+
         json += "{\"id\":" + string(PQgetvalue(r, i, 0));
-        json += ",\"name\":\"" + jsonEscape(PQgetvalue(r, i, 1)) + "\"";
+        json += ",\"name\":\"" +
+                jsonEscape(PQgetvalue(r, i, 1)) + "\"";
         json += ",\"price\":" + string(PQgetvalue(r, i, 2));
-        json += ",\"quantity\":" + string(PQgetvalue(r, i, 3)) + "}";
+        json += ",\"quantity\":" + string(PQgetvalue(r, i, 3));
+        json += "}";
     }
+
     json += "]";
     PQclear(r);
+
     return json;
 }
 
 string addProduct(PGconn* db, const string& body) {
-    // Accept a JSON object with name, price, and quantity.
-    // This simple parser expects unescaped product names.
-    size_t p = body.find("\"name\":\"");
-    if (p == string::npos) return "{\"error\":\"Invalid name\"}";
-    p += 8;
-    size_t e = body.find('"', p);
-    if (e == string::npos) return "{\"error\":\"Invalid name\"}";
-    string name = body.substr(p, e - p);
+    string name = jsonString(body, "name");
+    string price = jsonNumber(body, "price");
+    string quantity = jsonNumber(body, "quantity");
 
-    p = body.find("\"price\":");
-    if (p == string::npos) return "{\"error\":\"Invalid price\"}";
-    p += 8;
-    size_t pe = body.find_first_of(",}", p);
-    string price = body.substr(p, pe - p);
-
-    p = body.find("\"quantity\":");
-    if (p == string::npos) return "{\"error\":\"Invalid quantity\"}";
-    p += 11;
-    size_t qe = body.find_first_of(",}", p);
-    string quantity = body.substr(p, qe - p);
+    if (name.empty() || price.empty() || quantity.empty()) {
+        return "{\"success\":false,"
+               "\"message\":\"Name, price and quantity are required\"}";
+    }
 
     char* end = nullptr;
+
     double priceValue = strtod(price.c_str(), &end);
-    if (!end || *end != '\0' || priceValue < 0)
-        return "{\"error\":\"Invalid price\"}";
+
+    if (end == price.c_str() || *end != '\0' ||
+        priceValue < 0) {
+        return "{\"success\":false,"
+               "\"message\":\"Invalid price\"}";
+    }
 
     long quantityValue = strtol(quantity.c_str(), &end, 10);
-    if (!end || *end != '\0' || quantityValue < 0)
-        return "{\"error\":\"Invalid quantity\"}";
+
+    if (end == quantity.c_str() || *end != '\0' ||
+        quantityValue < 0) {
+        return "{\"success\":false,"
+               "\"message\":\"Invalid quantity\"}";
+    }
 
     const char* values[] = {
-        name.c_str(), price.c_str(), quantity.c_str()
+        name.c_str(),
+        price.c_str(),
+        quantity.c_str()
     };
 
     PGresult* r = PQexecParams(
         db,
-        "INSERT INTO products (name, price, quantity) VALUES ($1, $2, $3)",
-        3, nullptr, values, nullptr, nullptr, 0
+        "INSERT INTO products (name, price, quantity) "
+        "VALUES ($1, $2, $3)",
+        3,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0
     );
 
     if (PQresultStatus(r) != PGRES_COMMAND_OK) {
         PQclear(r);
-        return "{\"error\":\"Could not add product\"}";
+
+        return "{\"success\":false,"
+               "\"message\":\"Could not add product\"}";
     }
 
     PQclear(r);
-    return "{\"message\":\"Product added successfully\"}";
+
+    return "{\"success\":true,"
+           "\"message\":\"Product added successfully\"}";
 }
 
 string deleteProduct(PGconn* db, const string& path) {
     size_t slash = path.find_last_of('/');
-    if (slash == string::npos) return "{\"error\":\"Invalid product ID\"}";
+
+    if (slash == string::npos) {
+        return "{\"success\":false,"
+               "\"message\":\"Invalid product ID\"}";
+    }
 
     string id = path.substr(slash + 1);
-    if (id.empty() || !all_of(id.begin(), id.end(),
-                              [](unsigned char c) { return isdigit(c); }))
-        return "{\"error\":\"Invalid product ID\"}";
+
+    if (id.empty() ||
+        !all_of(id.begin(), id.end(), [](unsigned char c) {
+            return isdigit(c);
+        })) {
+        return "{\"success\":false,"
+               "\"message\":\"Invalid product ID\"}";
+    }
 
     const char* values[] = { id.c_str() };
+
     PGresult* r = PQexecParams(
-        db, "DELETE FROM products WHERE id = $1",
-        1, nullptr, values, nullptr, nullptr, 0
+        db,
+        "DELETE FROM products WHERE id = $1",
+        1,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0
     );
 
     if (PQresultStatus(r) != PGRES_COMMAND_OK) {
         PQclear(r);
-        return "{\"error\":\"Product delete failed\"}";
+
+        return "{\"success\":false,"
+               "\"message\":\"Product delete failed\"}";
     }
 
     bool deleted = string(PQcmdTuples(r)) != "0";
     PQclear(r);
 
-    return deleted ? "{\"message\":\"Product deleted successfully\"}"
-                   : "{\"error\":\"Product not found\"}";
+    if (!deleted) {
+        return "{\"success\":false,"
+               "\"message\":\"Product not found\"}";
+    }
+
+    return "{\"success\":true,"
+           "\"message\":\"Product deleted successfully\"}";
+}
+
+string registerUser(PGconn* db, const string& body) {
+    string name = jsonString(body, "name");
+    string email = jsonString(body, "email");
+    string password = jsonString(body, "password");
+
+    if (name.empty() || email.empty() || password.empty()) {
+        return "{\"success\":false,"
+               "\"message\":\"Please fill all fields\"}";
+    }
+
+    if (password.size() < 8) {
+        return "{\"success\":false,"
+               "\"message\":\"Password must contain at least 8 characters\"}";
+    }
+
+    const char* values[] = {
+        name.c_str(),
+        email.c_str(),
+        password.c_str()
+    };
+
+    PGresult* r = PQexecParams(
+        db,
+        "INSERT INTO users (name, email, password_hash) "
+        "VALUES ($1, $2, crypt($3, gen_salt('bf'))) "
+        "RETURNING id, name, email",
+        3,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0
+    );
+
+    if (PQresultStatus(r) != PGRES_TUPLES_OK) {
+        string error = PQresultErrorField(r, PG_DIAG_SQLSTATE)
+                       ? PQresultErrorField(r, PG_DIAG_SQLSTATE)
+                       : "";
+
+        PQclear(r);
+
+        if (error == "23505") {
+            return "{\"success\":false,"
+                   "\"message\":\"Email is already registered\"}";
+        }
+
+        return "{\"success\":false,"
+               "\"message\":\"Registration failed. Check server logs.\"}";
+    }
+
+    string id = PQgetvalue(r, 0, 0);
+    string userName = jsonEscape(PQgetvalue(r, 0, 1));
+    string userEmail = jsonEscape(PQgetvalue(r, 0, 2));
+
+    PQclear(r);
+
+    return "{\"success\":true,"
+           "\"message\":\"Registration successful\","
+           "\"user\":{\"id\":" + id +
+           ",\"name\":\"" + userName +
+           "\",\"email\":\"" + userEmail + "\"}}";
+}
+
+string loginUser(PGconn* db, const string& body) {
+    string email = jsonString(body, "email");
+    string password = jsonString(body, "password");
+
+    if (email.empty() || password.empty()) {
+        return "{\"success\":false,"
+               "\"message\":\"Email and password are required\"}";
+    }
+
+    const char* values[] = {
+        email.c_str(),
+        password.c_str()
+    };
+
+    PGresult* r = PQexecParams(
+        db,
+        "SELECT id, name, email FROM users "
+        "WHERE email = $1 "
+        "AND password_hash = crypt($2, password_hash)",
+        2,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0
+    );
+
+    if (PQresultStatus(r) != PGRES_TUPLES_OK) {
+        PQclear(r);
+
+        return "{\"success\":false,"
+               "\"message\":\"Login failed. Check server logs.\"}";
+    }
+
+    if (PQntuples(r) == 0) {
+        PQclear(r);
+
+        return "{\"success\":false,"
+               "\"message\":\"Invalid email or password\"}";
+    }
+
+    string id = PQgetvalue(r, 0, 0);
+    string name = jsonEscape(PQgetvalue(r, 0, 1));
+    string userEmail = jsonEscape(PQgetvalue(r, 0, 2));
+
+    PQclear(r);
+
+    return "{\"success\":true,"
+           "\"message\":\"Login successful\","
+           "\"user\":{\"id\":" + id +
+           ",\"name\":\"" + name +
+           "\",\"email\":\"" + userEmail + "\"}}";
 }
 
 int main() {
     PGconn* db = connectDatabase();
+
     if (!db) return 1;
 
     const char* portEnv = getenv("PORT");
     int port = portEnv ? atoi(portEnv) : 8080;
+
     if (port <= 0 || port > 65535) port = 8080;
 
     int server = socket(AF_INET, SOCK_STREAM, 0);
+
     if (server < 0) {
         cerr << "Socket creation failed\n";
         PQfinish(db);
@@ -206,7 +481,8 @@ int main() {
     address.sin_port = htons(port);
 
     if (bind(server, reinterpret_cast<sockaddr*>(&address),
-             sizeof(address)) < 0 || listen(server, 20) < 0) {
+             sizeof(address)) < 0 ||
+        listen(server, 20) < 0) {
         cerr << "Could not bind/listen on port " << port << '\n';
         close(server);
         PQfinish(db);
@@ -217,50 +493,84 @@ int main() {
 
     while (true) {
         int client = accept(server, nullptr, nullptr);
+
         if (client < 0) continue;
 
         string request;
         char buffer[4096];
-        ssize_t n;
-        while ((n = recv(client, buffer, sizeof(buffer), 0)) > 0) {
+        size_t contentLength = 0;
+        size_t headerEnd = string::npos;
+
+        while (request.size() < 1024 * 1024) {
+            ssize_t n = recv(client, buffer, sizeof(buffer), 0);
+
+            if (n <= 0) break;
+
             request.append(buffer, static_cast<size_t>(n));
-            size_t headerEnd = request.find("\r\n\r\n");
+
+            headerEnd = request.find("\r\n\r\n");
+
             if (headerEnd != string::npos) {
-                size_t contentLength = 0;
                 size_t cp = request.find("Content-Length:");
+
                 if (cp != string::npos && cp < headerEnd) {
                     cp += 15;
-                    while (cp < headerEnd && request[cp] == ' ') ++cp;
-                    contentLength = strtoul(request.c_str() + cp, nullptr, 10);
+
+                    while (cp < headerEnd &&
+                           request[cp] == ' ') ++cp;
+
+                    contentLength = strtoul(
+                        request.c_str() + cp, nullptr, 10
+                    );
                 }
-                if (request.size() >= headerEnd + 4 + contentLength) break;
+
+                if (request.size() >= headerEnd + 4 + contentLength)
+                    break;
             }
-            if (request.size() > 1024 * 1024) break;
         }
 
         size_t lineEnd = request.find("\r\n");
         string line = request.substr(0, lineEnd);
-        size_t h = request.find("\r\n\r\n");
-        string body = h == string::npos ? "" : request.substr(h + 4);
+
+        string body = headerEnd == string::npos
+            ? ""
+            : request.substr(headerEnd + 4, contentLength);
+
         string result;
+        string status = "200 OK";
 
         if (line.rfind("OPTIONS ", 0) == 0) {
             sendResponse(client, "{}");
+        } else if (line.rfind("GET / ", 0) == 0) {
+            sendResponse(
+                client,
+                "{\"success\":true,\"message\":\"YaluMart API is running\"}"
+            );
         } else if (line.rfind("GET /api/products ", 0) == 0) {
             result = getProducts(db);
             sendResponse(client, result);
         } else if (line.rfind("POST /api/products/add ", 0) == 0) {
             result = addProduct(db, body);
             sendResponse(client, result);
+        } else if (line.rfind("POST /api/register ", 0) == 0) {
+            result = registerUser(db, body);
+            sendResponse(client, result);
+        } else if (line.rfind("POST /api/login ", 0) == 0) {
+            result = loginUser(db, body);
+            sendResponse(client, result);
         } else if (line.rfind("DELETE /api/products/", 0) == 0) {
             size_t start = line.find(' ') + 1;
             size_t end = line.find(' ', start);
             string path = line.substr(start, end - start);
+
             result = deleteProduct(db, path);
             sendResponse(client, result);
         } else {
-            sendResponse(client, "{\"message\":\"YaluMart API is running\"}",
-                         "404 Not Found");
+            sendResponse(
+                client,
+                "{\"success\":false,\"message\":\"Route not found\"}",
+                "404 Not Found"
+            );
         }
 
         close(client);
@@ -268,5 +578,6 @@ int main() {
 
     close(server);
     PQfinish(db);
+
     return 0;
 }
