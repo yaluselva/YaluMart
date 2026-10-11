@@ -1,472 +1,255 @@
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <libpq-fe.h>
+
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <sstream>
-#include <winsock2.h>
-#include <libpq-fe.h>
+#include <algorithm>
 
 using namespace std;
 
-#pragma comment(lib, "ws2_32.lib")
+PGconn* connectDatabase() {
+    const char* url = getenv("DATABASE_URL");
 
-// ===============================
-// PostgreSQL Connection
-// ===============================
-PGconn* connectDatabase()
-{
-PGconn* conn = PQconnectdb(
-    "host=localhost "
-    "port=5432 "
-    "dbname=yalu_mart "
-    "user=postgres "
-    "password=yalu@sm7126"
-);    
-
-    if (PQstatus(conn) != CONNECTION_OK)
-    {
-        cout << "Database connection failed!" << endl;
-        cout << PQerrorMessage(conn) << endl;
-
-        PQfinish(conn);
+    if (!url) {
+        cerr << "DATABASE_URL is not set\n";
         return nullptr;
     }
 
-    cout << "PostgreSQL Connected Successfully!" << endl;
+    PGconn* db = PQconnectdb(url);
 
-    return conn;
+    if (PQstatus(db) != CONNECTION_OK) {
+        cerr << PQerrorMessage(db) << '\n';
+        PQfinish(db);
+        return nullptr;
+    }
+
+    cout << "PostgreSQL connected\n";
+    return db;
 }
 
-// ===============================
-// Send HTTP Response
-// ===============================
-void sendResponse(
-    SOCKET clientSocket,
-    const string& body,
-    const string& status = "200 OK"
-)
-{
+string jsonEscape(const string& s) {
+    string out;
+    for (char c : s) {
+        if (c == '"' || c == '\\') out += '\\';
+        if (c == '\n') { out += "\\n"; continue; }
+        if (c == '\r') continue;
+        out += c;
+    }
+    return out;
+}
+
+void sendResponse(int client, const string& body,
+                  const string& status = "200 OK") {
     string response =
         "HTTP/1.1 " + status + "\r\n"
-        "Content-Type: application/json\r\n"
+        "Content-Type: application/json; charset=utf-8\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n"
         "Access-Control-Allow-Headers: Content-Type\r\n"
-        "Content-Length: " + to_string(body.length()) + "\r\n"
-        "\r\n" +
-        body;
+        "Connection: close\r\n"
+        "Content-Length: " + to_string(body.size()) + "\r\n\r\n" + body;
 
-    send(
-        clientSocket,
-        response.c_str(),
-        response.length(),
-        0
-    );
+    size_t sent = 0;
+    while (sent < response.size()) {
+        ssize_t n = send(client, response.data() + sent,
+                         response.size() - sent, 0);
+        if (n <= 0) break;
+        sent += static_cast<size_t>(n);
+    }
 }
 
-// ===============================
-// GET PRODUCTS
-// ===============================
-string getProducts(PGconn* db)
-{
-    PGresult* result = PQexec(
-        db,
-        "SELECT id, name, price, quantity "
-        "FROM products ORDER BY id"
+string getProducts(PGconn* db) {
+    PGresult* r = PQexec(
+        db, "SELECT id, name, price, quantity FROM products ORDER BY id"
     );
 
-    if (PQresultStatus(result) != PGRES_TUPLES_OK)
-    {
-        PQclear(result);
-
+    if (PQresultStatus(r) != PGRES_TUPLES_OK) {
+        PQclear(r);
         return "{\"error\":\"Failed to fetch products\"}";
     }
 
     string json = "[";
-
-    int rows = PQntuples(result);
-
-    for (int i = 0; i < rows; i++)
-    {
-        if (i > 0)
-            json += ",";
-
-        json += "{";
-
-        json += "\"id\":";
-        json += PQgetvalue(result, i, 0);
-        json += ",";
-
-        json += "\"name\":\"";
-        json += PQgetvalue(result, i, 1);
-        json += "\",";
-
-        json += "\"price\":";
-        json += PQgetvalue(result, i, 2);
-        json += ",";
-
-        json += "\"quantity\":";
-        json += PQgetvalue(result, i, 3);
-
-        json += "}";
+    for (int i = 0; i < PQntuples(r); ++i) {
+        if (i) json += ",";
+        json += "{\"id\":" + string(PQgetvalue(r, i, 0));
+        json += ",\"name\":\"" + jsonEscape(PQgetvalue(r, i, 1)) + "\"";
+        json += ",\"price\":" + string(PQgetvalue(r, i, 2));
+        json += ",\"quantity\":" + string(PQgetvalue(r, i, 3)) + "}";
     }
-
     json += "]";
-
-    PQclear(result);
-
+    PQclear(r);
     return json;
 }
 
-// ===============================
-// ADD PRODUCT
-// ===============================
-string addProduct(PGconn* db, const string& body)
-{
-    // Expected JSON:
-    // {"name":"Laptop","price":45000,"quantity":5}
+string addProduct(PGconn* db, const string& body) {
+    // Accept a JSON object with name, price, and quantity.
+    // This simple parser expects unescaped product names.
+    size_t p = body.find("\"name\":\"");
+    if (p == string::npos) return "{\"error\":\"Invalid name\"}";
+    p += 8;
+    size_t e = body.find('"', p);
+    if (e == string::npos) return "{\"error\":\"Invalid name\"}";
+    string name = body.substr(p, e - p);
 
-    size_t nameStart = body.find("\"name\":\"");
+    p = body.find("\"price\":");
+    if (p == string::npos) return "{\"error\":\"Invalid price\"}";
+    p += 8;
+    size_t pe = body.find_first_of(",}", p);
+    string price = body.substr(p, pe - p);
 
-    if (nameStart == string::npos)
-        return "{\"error\":\"Invalid product name\"}";
+    p = body.find("\"quantity\":");
+    if (p == string::npos) return "{\"error\":\"Invalid quantity\"}";
+    p += 11;
+    size_t qe = body.find_first_of(",}", p);
+    string quantity = body.substr(p, qe - p);
 
-    nameStart += 8;
-
-    size_t nameEnd = body.find("\"", nameStart);
-
-    if (nameEnd == string::npos)
-        return "{\"error\":\"Invalid product name\"}";
-
-    string name = body.substr(
-        nameStart,
-        nameEnd - nameStart
-    );
-
-    size_t priceStart = body.find("\"price\":");
-
-    if (priceStart == string::npos)
+    char* end = nullptr;
+    double priceValue = strtod(price.c_str(), &end);
+    if (!end || *end != '\0' || priceValue < 0)
         return "{\"error\":\"Invalid price\"}";
 
-    priceStart += 8;
-
-    size_t priceEnd = body.find(",", priceStart);
-
-    string priceText;
-
-    if (priceEnd == string::npos)
-        priceText = body.substr(priceStart);
-    else
-        priceText = body.substr(
-            priceStart,
-            priceEnd - priceStart
-        );
-
-    size_t quantityStart = body.find("\"quantity\":");
-
-    if (quantityStart == string::npos)
+    long quantityValue = strtol(quantity.c_str(), &end, 10);
+    if (!end || *end != '\0' || quantityValue < 0)
         return "{\"error\":\"Invalid quantity\"}";
 
-    quantityStart += 11;
+    const char* values[] = {
+        name.c_str(), price.c_str(), quantity.c_str()
+    };
 
-    size_t quantityEnd = body.find("}", quantityStart);
-
-    string quantityText =
-        body.substr(
-            quantityStart,
-            quantityEnd - quantityStart
-        );
-
-    string query =
-        "INSERT INTO products "
-        "(name, price, quantity) VALUES ('" +
-        name + "', " +
-        priceText + ", " +
-        quantityText + ")";
-
-    PGresult* result = PQexec(
+    PGresult* r = PQexecParams(
         db,
-        query.c_str()
+        "INSERT INTO products (name, price, quantity) VALUES ($1, $2, $3)",
+        3, nullptr, values, nullptr, nullptr, 0
     );
 
-    if (PQresultStatus(result) != PGRES_COMMAND_OK)
-    {
-        string error = PQerrorMessage(db);
-
-        PQclear(result);
-
-        return "{\"error\":\"" + error + "\"}";
+    if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+        PQclear(r);
+        return "{\"error\":\"Could not add product\"}";
     }
 
-    PQclear(result);
-
+    PQclear(r);
     return "{\"message\":\"Product added successfully\"}";
 }
 
-// ===============================
-// DELETE PRODUCT
-// ===============================
-string deleteProduct(PGconn* db, int productId)
-{
-    string query =
-        "DELETE FROM products WHERE id = " +
-        to_string(productId);
+string deleteProduct(PGconn* db, const string& path) {
+    size_t slash = path.find_last_of('/');
+    if (slash == string::npos) return "{\"error\":\"Invalid product ID\"}";
 
-    PGresult* result = PQexec(
-        db,
-        query.c_str()
+    string id = path.substr(slash + 1);
+    if (id.empty() || !all_of(id.begin(), id.end(),
+                              [](unsigned char c) { return isdigit(c); }))
+        return "{\"error\":\"Invalid product ID\"}";
+
+    const char* values[] = { id.c_str() };
+    PGresult* r = PQexecParams(
+        db, "DELETE FROM products WHERE id = $1",
+        1, nullptr, values, nullptr, nullptr, 0
     );
 
-    if (PQresultStatus(result) != PGRES_COMMAND_OK)
-    {
-        PQclear(result);
-
+    if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+        PQclear(r);
         return "{\"error\":\"Product delete failed\"}";
     }
 
-    PQclear(result);
+    bool deleted = string(PQcmdTuples(r)) != "0";
+    PQclear(r);
 
-    return "{\"message\":\"Product deleted successfully\"}";
+    return deleted ? "{\"message\":\"Product deleted successfully\"}"
+                   : "{\"error\":\"Product not found\"}";
 }
 
-// ===============================
-// MAIN SERVER
-// ===============================
-int main()
-{
-    cout << "Starting YaluMart Backend..." << endl;
-
-    // Connect PostgreSQL
+int main() {
     PGconn* db = connectDatabase();
+    if (!db) return 1;
 
-    if (db == nullptr)
-    {
-        cout << "Backend stopped because database connection failed."
-             << endl;
+    const char* portEnv = getenv("PORT");
+    int port = portEnv ? atoi(portEnv) : 8080;
+    if (port <= 0 || port > 65535) port = 8080;
 
-        return 1;
-    }
-
-    // Start Windows Socket
-    WSADATA wsa;
-
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-    {
-        cout << "Winsock startup failed!" << endl;
-
+    int server = socket(AF_INET, SOCK_STREAM, 0);
+    if (server < 0) {
+        cerr << "Socket creation failed\n";
         PQfinish(db);
-
         return 1;
     }
 
-    SOCKET serverSocket =
-        socket(
-            AF_INET,
-            SOCK_STREAM,
-            0
-        );
+    int yes = 1;
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
-    if (serverSocket == INVALID_SOCKET)
-    {
-        cout << "Socket creation failed!" << endl;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons(port);
 
+    if (bind(server, reinterpret_cast<sockaddr*>(&address),
+             sizeof(address)) < 0 || listen(server, 20) < 0) {
+        cerr << "Could not bind/listen on port " << port << '\n';
+        close(server);
         PQfinish(db);
-        WSACleanup();
-
         return 1;
     }
 
-    sockaddr_in serverAddress{};
+    cout << "YaluMart API listening on port " << port << '\n';
 
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(8080);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    while (true) {
+        int client = accept(server, nullptr, nullptr);
+        if (client < 0) continue;
 
-    if (bind(
-        serverSocket,
-        (sockaddr*)&serverAddress,
-        sizeof(serverAddress)
-    ) == SOCKET_ERROR)
-    {
-        cout << "Bind failed!" << endl;
-
-        closesocket(serverSocket);
-        PQfinish(db);
-        WSACleanup();
-
-        return 1;
-    }
-
-    if (listen(serverSocket, 10) == SOCKET_ERROR)
-    {
-        cout << "Listen failed!" << endl;
-
-        closesocket(serverSocket);
-        PQfinish(db);
-        WSACleanup();
-
-        return 1;
-    }
-
-    cout << endl;
-    cout << "================================" << endl;
-    cout << "        YaluMart Backend" << endl;
-    cout << "================================" << endl;
-    cout << "Server running on port 8080" << endl;
-    cout << "Database: yalu_mart" << endl;
-    cout << "================================" << endl;
-    cout << endl;
-
-    while (true)
-    {
-        SOCKET clientSocket =
-            accept(
-                serverSocket,
-                nullptr,
-                nullptr
-            );
-
-        if (clientSocket == INVALID_SOCKET)
-            continue;
-
-        char buffer[8192] = {};
-
-        int received =
-            recv(
-                clientSocket,
-                buffer,
-                sizeof(buffer) - 1,
-                0
-            );
-
-        if (received <= 0)
-        {
-            closesocket(clientSocket);
-            continue;
-        }
-
-        buffer[received] = '\0';
-
-        string request(buffer);
-
-        string responseBody;
-
-        // =========================
-        // OPTIONS - CORS
-        // =========================
-        if (request.find("OPTIONS") == 0)
-        {
-            sendResponse(
-                clientSocket,
-                "{}"
-            );
-        }
-
-        // =========================
-        // GET PRODUCTS
-        // =========================
-        else if (
-            request.find("GET /api/products") == 0
-        )
-        {
-            responseBody =
-                getProducts(db);
-
-            sendResponse(
-                clientSocket,
-                responseBody
-            );
-        }
-
-        // =========================
-        // POST ADD PRODUCT
-        // =========================
-        else if (
-            request.find("POST /api/products/add") == 0
-        )
-        {
-            size_t bodyStart =
-                request.find("\r\n\r\n");
-
-            string body;
-
-            if (bodyStart != string::npos)
-            {
-                body =
-                    request.substr(
-                        bodyStart + 4
-                    );
+        string request;
+        char buffer[4096];
+        ssize_t n;
+        while ((n = recv(client, buffer, sizeof(buffer), 0)) > 0) {
+            request.append(buffer, static_cast<size_t>(n));
+            size_t headerEnd = request.find("\r\n\r\n");
+            if (headerEnd != string::npos) {
+                size_t contentLength = 0;
+                size_t cp = request.find("Content-Length:");
+                if (cp != string::npos && cp < headerEnd) {
+                    cp += 15;
+                    while (cp < headerEnd && request[cp] == ' ') ++cp;
+                    contentLength = strtoul(request.c_str() + cp, nullptr, 10);
+                }
+                if (request.size() >= headerEnd + 4 + contentLength) break;
             }
-
-            responseBody =
-                addProduct(
-                    db,
-                    body
-                );
-
-            sendResponse(
-                clientSocket,
-                responseBody
-            );
+            if (request.size() > 1024 * 1024) break;
         }
 
-        // =========================
-        // DELETE PRODUCT
-        // =========================
-        else if (
-            request.find("DELETE /api/products/") == 0
-        )
-        {
-            string path =
-                request.substr(
-                    21
-                );
+        size_t lineEnd = request.find("\r\n");
+        string line = request.substr(0, lineEnd);
+        size_t h = request.find("\r\n\r\n");
+        string body = h == string::npos ? "" : request.substr(h + 4);
+        string result;
 
-            size_t space =
-                path.find(" ");
-
-            if (space != string::npos)
-                path =
-                    path.substr(
-                        0,
-                        space
-                    );
-
-            int productId =
-                stoi(path);
-
-            responseBody =
-                deleteProduct(
-                    db,
-                    productId
-                );
-
-            sendResponse(
-                clientSocket,
-                responseBody
-            );
+        if (line.rfind("OPTIONS ", 0) == 0) {
+            sendResponse(client, "{}");
+        } else if (line.rfind("GET /api/products ", 0) == 0) {
+            result = getProducts(db);
+            sendResponse(client, result);
+        } else if (line.rfind("POST /api/products/add ", 0) == 0) {
+            result = addProduct(db, body);
+            sendResponse(client, result);
+        } else if (line.rfind("DELETE /api/products/", 0) == 0) {
+            size_t start = line.find(' ') + 1;
+            size_t end = line.find(' ', start);
+            string path = line.substr(start, end - start);
+            result = deleteProduct(db, path);
+            sendResponse(client, result);
+        } else {
+            sendResponse(client, "{\"message\":\"YaluMart API is running\"}",
+                         "404 Not Found");
         }
 
-        // =========================
-        // UNKNOWN API
-        // =========================
-        else
-        {
-            responseBody =
-                "{\"message\":\"YaluMart Backend is working!\"}";
-
-            sendResponse(
-                clientSocket,
-                responseBody
-            );
-        }
-
-        closesocket(clientSocket);
+        close(client);
     }
 
-    closesocket(serverSocket);
-
+    close(server);
     PQfinish(db);
-
-    WSACleanup();
-
     return 0;
 }
