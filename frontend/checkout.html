@@ -25,6 +25,23 @@
 <main>
 
     <h2>🧾 Checkout</h2>
+    <div class="checkout-form">
+    <h3>Customer Details</h3>
+
+    <label for="customerName">Full Name</label><br>
+    <input type="text" id="customerName"
+           placeholder="Enter your name" required><br><br>
+
+    <label for="customerAddress">Address</label><br>
+    <textarea id="customerAddress"
+              placeholder="Enter your delivery address"
+              required></textarea><br><br>
+
+    <label for="customerPhone">Phone Number</label><br>
+    <input type="tel" id="customerPhone"
+           placeholder="Enter your phone number"
+           maxlength="10" required><br><br>
+</div>
 
     <div id="checkoutContainer">
         <p>Loading order details...</p>
@@ -91,46 +108,51 @@ function loadCheckout()
         "Total: ₹" + total;
 }
 
-function placeOrder()
-{
-    if (cart.length === 0)
-    {
+
+function placeOrder() {
+    if (cart.length === 0) {
         alert("Your cart is empty!");
         return;
     }
 
-    const order =
-    {
+    const name = document.getElementById("customerName").value.trim();
+    const address = document.getElementById("customerAddress").value.trim();
+    const phone = document.getElementById("customerPhone").value.trim();
+
+    if (!name || !address || !phone) {
+        alert("Please enter your name, address and phone number.");
+        return;
+    }
+
+    if (!/^\d{10}$/.test(phone)) {
+        alert("Please enter a valid 10-digit phone number.");
+        return;
+    }
+
+    const order = {
         id: Date.now(),
+        customerName: name,
+        address: address,
+        phone: phone,
         items: cart,
         status: "Pending",
         total: cart.reduce(
-            function(sum, item)
-            {
-                return sum + item.price * item.quantity;
-            },
+            (sum, item) => sum + item.price * item.quantity,
             0
         )
     };
 
-    let orders =
-        JSON.parse(
-            localStorage.getItem("yaluMartOrders")
-        ) || [];
+    const orders =
+        JSON.parse(localStorage.getItem("yaluMartOrders")) || [];
 
     orders.push(order);
-
-    localStorage.setItem(
-        "yaluMartOrders",
-        JSON.stringify(orders)
-    );
-
+    localStorage.setItem("yaluMartOrders", JSON.stringify(orders));
     localStorage.removeItem("yaluMartCart");
 
-    alert("Order placed successfully! 🎉");
-
+    alert("Order placed successfully!");
     window.location.href = "orders.html";
 }
+
 
 loadCheckout();
 
