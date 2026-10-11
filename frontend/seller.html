@@ -123,118 +123,113 @@
     <p>© 2026 YaluMart. All Rights Reserved.</p>
 </footer>
 
+
 <script>
+const API = "https://yalumart-f1hi.onrender.com/api/products";
 
-async function addProduct()
-{
-    const name =
-        document.getElementById("productName").value.trim();
+async function showProducts() {
+    const container = document.getElementById("sellerProducts");
+    container.innerHTML = "<p>Loading products...</p>";
 
-    const price =
-        document.getElementById("productPrice").value;
+    try {
+        const response = await fetch(API);
+        if (!response.ok) throw new Error("HTTP " + response.status);
 
-    const quantity =
-        document.getElementById("productQuantity").value;
+        const products = await response.json();
+        container.innerHTML = "";
 
-    if (name === "" || price === "" || quantity === "")
-    {
-        alert("Please enter all product details!");
+        if (products.length === 0) {
+            container.innerHTML = "<p>No products added yet.</p>";
+            return;
+        }
+
+        products.forEach(product => {
+            const card = document.createElement("div");
+            card.className = "seller-card";
+
+            const title = document.createElement("h3");
+            title.textContent = "🛍️ " + product.name;
+
+            const price = document.createElement("p");
+            price.textContent = "Price: ₹" + product.price;
+
+            const quantity = document.createElement("p");
+            quantity.textContent = "Quantity: " + product.quantity;
+
+            const button = document.createElement("button");
+            button.textContent = "Delete";
+            button.onclick = () => deleteProduct(product.id);
+
+            card.append(title, price, quantity, button);
+            container.appendChild(card);
+        });
+    } catch (error) {
+        console.error(error);
+        container.innerHTML =
+            "<p>Unable to load products. Please try again.</p>";
+    }
+}
+
+async function addProduct() {
+    const name = document.getElementById("productName").value.trim();
+    const price = Number(document.getElementById("productPrice").value);
+    const quantity = Number(document.getElementById("productQuantity").value);
+
+    if (!name ||
+        document.getElementById("productPrice").value === "" ||
+        document.getElementById("productQuantity").value === "" ||
+        !Number.isFinite(price) || price < 0 ||
+        !Number.isInteger(quantity) || quantity < 0) {
+        alert("Enter a valid name, price and quantity.");
         return;
     }
 
-    try
-    {
-        const response = await fetch(
-            "http://localhost:8080/api/products/add",
-            {
-                method: "POST",
-                headers:
-                {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(
-                {
-                    name: name,
-                    price: Number(price),
-                    quantity: Number(quantity)
-                })
-            }
-        );
+    try {
+        const response = await fetch(API + "/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, price, quantity })
+        });
 
         const result = await response.json();
 
-        alert(result.message);
-
-        if (result.success)
-        {
-            showProducts();
+        if (!response.ok || result.error) {
+            throw new Error(result.error || "Could not add product");
         }
-    }
-    catch (error)
-    {
-        console.log(error);
-        alert("Unable to connect to YaluMart API!");
+
+        alert(result.message || "Product added successfully!");
+
+        document.getElementById("productName").value = "";
+        document.getElementById("productPrice").value = "";
+        document.getElementById("productQuantity").value = "";
+
+        await showProducts();
+    } catch (error) {
+        console.error(error);
+        alert("Unable to add product. Check the API connection.");
     }
 }
 
-function showProducts()
-{
-    let products =
-        JSON.parse(
-            localStorage.getItem("yaluSellerProducts")
-        ) || [];
+async function deleteProduct(id) {
+    if (!confirm("Delete this product?")) return;
 
-    const container =
-        document.getElementById("sellerProducts");
+    try {
+        const response = await fetch(API + "/" + id, {
+            method: "DELETE"
+        });
 
-    container.innerHTML = "";
+        const result = await response.json();
 
-    if (products.length === 0)
-    {
-        container.innerHTML =
-            "<p>No products added yet.</p>";
-        return;
+        if (!response.ok || result.error) {
+            throw new Error(result.error || "Could not delete product");
+        }
+
+        await showProducts();
+    } catch (error) {
+        console.error(error);
+        alert("Unable to delete product.");
     }
-
-    products.forEach(function(product, index)
-    {
-        const card =
-            document.createElement("div");
-
-        card.className = "seller-card";
-
-        card.innerHTML =
-            "<h3>🛍️ " + product.name + "</h3>" +
-            "<p>Price: ₹" + product.price + "</p>" +
-            "<p>Quantity: " + product.quantity + "</p>" +
-            "<button onclick='deleteProduct(" + index + ")'>Delete</button>";
-
-        container.appendChild(card);
-    });
-}
-
-function deleteProduct(index)
-{
-    let products =
-        JSON.parse(
-            localStorage.getItem("yaluSellerProducts")
-        ) || [];
-
-    products.splice(index, 1);
-
-    localStorage.setItem(
-        "yaluSellerProducts",
-        JSON.stringify(products)
-    );
-
-    showProducts();
 }
 
 showProducts();
-
 </script>
-
-
-
-</body>
-</html>
