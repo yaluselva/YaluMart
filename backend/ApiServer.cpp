@@ -1,6 +1,5 @@
 
 #include <arpa/inet.h>
-#include<cmath>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -428,11 +427,8 @@ string loginUser(PGconn* db, const string& body) {
     );
 
     if (PQresultStatus(r) != PGRES_TUPLES_OK) {
-        PQclear(r);
-        return "{\"success\":false,\"message\":\"Login failed\"}";
-    }
-
-    if (PQntuples(r) == 0) {
+        PQcl
+        f (PQntuples(r) == 0) {
         PQclear(r);
         return "{\"success\":false,\"message\":\"Invalid email or password\"}";
     }
@@ -566,6 +562,97 @@ string getUsers(PGconn* db) {
     PQclear(r);
     return json;
 }
+string deleteOrder(PGconn* db, const string& path) {
+    size_t slash = path.find_last_of('/');
+    if (slash == string::npos)
+        return "{\"success\":false,\"message\":\"Invalid order ID\"}";
+
+    string id = path.substr(slash + 1);
+    if (!validPositiveId(id))
+        return "{\"success\":false,\"message\":\"Invalid order ID\"}";
+
+    const char* values[] = { id.c_str() };
+    PGresult* r = PQexecParams(
+        db, "DELETE FROM orders WHERE id=$1",
+        1, nullptr, values, nullptr, nullptr, 0
+    );
+
+    if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+        PQclear(r);
+        return "{\"success\":false,\"message\":\"Order delete failed\"}";
+    }
+
+    bool deleted = string(PQcmdTuples(r)) != "0";
+    PQclear(r);
+
+    if (!deleted)
+        return "{\"success\":false,\"message\":\"Order not found\"}";
+
+    return "{\"success\":true,\"message\":\"Order deleted successfully\"}";
+}
+
+string updateOrderStatus(PGconn* db, const string& body) {
+    string id = jsonNumber(body, "id");
+    string status = jsonString(body, "status");
+
+    if (!validPositiveId(id))
+        return "{\"success\":false,\"message\":\"Invalid order ID\"}";
+
+    if (status != "Pending" && status != "Confirmed" &&
+        status != "Shipped" && status != "Delivered" &&
+        status != "Cancelled") {
+        return "{\"success\":false,\"message\":\"Invalid order status\"}";
+    }
+
+    const char* values[] = { id.c_str(), status.c_str() };
+    PGresult* r = PQexecParams(
+        db,
+        "UPDATE orders SET status=$2 WHERE id=$1 RETURNING id",
+        2, nullptr, values, nullptr, nullptr, 0
+    );
+
+    if (PQresultStatus(r) != PGRES_TUPLES_OK) {
+        PQclear(r);
+        return "{\"success\":false,\"message\":\"Order update failed\"}";
+    }
+
+    bool updated = PQntuples(r) > 0;
+    PQclear(r);
+
+    if (!updated)
+        return "{\"success\":false,\"message\":\"Order not found\"}";
+
+    return "{\"success\":true,\"message\":\"Order status updated\"}";
+}
+
+string deleteUser(PGconn* db, const string& path) {
+    size_t slash = path.find_last_of('/');
+    if (slash == string::npos)
+        return "{\"success\":false,\"message\":\"Invalid user ID\"}";
+
+    string id = path.substr(slash + 1);
+    if (!validPositiveId(id))
+        return "{\"success\":false,\"message\":\"Invalid user ID\"}";
+
+    const char* values[] = { id.c_str() };
+    PGresult* r = PQexecParams(
+        db, "DELETE FROM users WHERE id=$1",
+        1, nullptr, values, nullptr, nullptr, 0
+    );
+
+    if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+        PQclear(r);
+        return "{\"success\":false,\"message\":\"User delete failed\"}";
+    }
+
+    bool deleted = string(PQcmdTuples(r)) != "0";
+    PQclear(r);
+
+    if (!deleted)
+        return "{\"success\":false,\"message\":\"User not found\"}";
+
+    return "{\"success\":true,\"message\":\"User deleted successfully\"}";
+}
 
 int main() {
     PGconn* db = connectDatabase();
@@ -660,6 +747,19 @@ int main() {
             sendResponse(client, getOrders(db));
         } else if (line.rfind("GET /api/users ", 0) == 0) {
             sendResponse(client, getUsers(db));
+            } else if (line.rfind("PUT /api/orders/status ", 0) == 0) {
+            sendResponse(client, updateOrderStatus(db, body));
+        } else if (line.rfind("DELETE /api/orders/", 0) == 0) {
+            size_t start = line.find(' ') + 1;
+            size_t end = line.find(' ', start);
+            string path = line.substr(start, end - start);
+            sendResponse(client, deleteOrder(db, path));
+        } else if (line.rfind("DELETE /api/users/", 0) == 0) {
+            size_t start = line.find(' ') + 1;
+            size_t end = line.find(' ', start);
+            string path = line.substr(start, end - start);
+            sendResponse(client, deleteUser(db, path));
+
         } else if (line.rfind("DELETE /api/products/", 0) == 0) {
             size_t start = line.find(' ') + 1;
             size_t end = line.find(' ', start);
