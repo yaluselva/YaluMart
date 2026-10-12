@@ -68,7 +68,7 @@ async function loginUser() {
             localStorage.setItem("loggedInUser", JSON.stringify(user));
 
             message.textContent = "Login successful!";
-            window.location.href = "index.html";
+            window.location.href = "buyer.html";
         } else {
             message.textContent =
                 result.message || "Invalid email or password.";
