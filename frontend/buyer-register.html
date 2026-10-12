@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YaluMart - Buyer Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <h1>🛍️ YaluMart</h1>
+    <p>Welcome Back, Buyer!</p>
+</header>
+
+<main>
+    <div class="product">
+        <h2>Buyer Login</h2>
+
+        <form id="buyerLoginForm">
+            <input
+                type="email"
+                id="buyerEmail"
+                placeholder="Enter Email"
+                required
+            >
+            <br><br>
+
+            <input
+                type="password"
+                id="buyerPassword"
+                placeholder="Enter Password"
+                required
+            >
+            <br><br>
+
+            <button type="submit">Login as Buyer</button>
+        </form>
+
+        <p id="loginMessage"></p>
+
+        <p>Don't have an account?</p>
+        <a href="buyer-register.html">Register as Buyer</a>
+
+        <br><br>
+        <a href="buyer.html">Back to Buyer Dashboard</a>
+    </div>
+</main>
+
+<script>
+document.getElementById("buyerLoginForm")
+.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const email = document.getElementById("buyerEmail").value.trim();
+    const password = document.getElementById("buyerPassword").value;
+    const message = document.getElementById("loginMessage");
+
+    message.textContent = "Checking login...";
+
+    try {
+        const response = await fetch(
+            "https://yalumart-f1hi.onrender.com/api/login",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ email, password })
+            }
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            const user = result.user || { email: email };
+
+            localStorage.setItem(
+                "loggedInUser",
+                JSON.stringify(user)
+            );
+
+            message.textContent = "Login successful!";
+
+            window.location.href = "buyer.html";
+        } else {
+            message.textContent =
+                result.message || "Invalid email or password.";
+        }
+    } catch (error) {
+        message.textContent =
+            "Unable to connect to YaluMart. Please try again.";
+    }
+});
+</script>
+
+</body>
+</html>
